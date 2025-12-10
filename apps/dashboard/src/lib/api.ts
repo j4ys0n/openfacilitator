@@ -161,7 +161,7 @@ class ApiClient {
 
   async getDomainStatus(facilitatorId: string): Promise<{
     domain: string;
-    status: 'pending' | 'active' | 'not_added' | 'unconfigured';
+    status: 'pending' | 'active' | 'not_added' | 'unconfigured' | 'manual_setup';
     railwayConfigured: boolean;
     message?: string;
     dnsRecords?: { type: string; name: string; value: string }[];

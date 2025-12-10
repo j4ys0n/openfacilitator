@@ -31,14 +31,16 @@ interface DomainStatus {
 
 /**
  * Get Railway configuration from environment
+ * Railway automatically provides RAILWAY_SERVICE_ID and RAILWAY_ENVIRONMENT_ID
+ * You only need to set RAILWAY_TOKEN (project token from Project Settings → Tokens)
  */
 function getConfig(): RailwayConfig {
-  const apiToken = process.env.RAILWAY_API_TOKEN;
+  const apiToken = process.env.RAILWAY_TOKEN;
   const serviceId = process.env.RAILWAY_SERVICE_ID;
   const environmentId = process.env.RAILWAY_ENVIRONMENT_ID;
 
   if (!apiToken || !serviceId || !environmentId) {
-    throw new Error('Missing Railway configuration. Set RAILWAY_API_TOKEN, RAILWAY_SERVICE_ID, and RAILWAY_ENVIRONMENT_ID');
+    throw new Error('Missing Railway configuration. Set RAILWAY_TOKEN from Project Settings → Tokens');
   }
 
   return { apiToken, serviceId, environmentId };
@@ -59,11 +61,13 @@ async function railwayQuery<T>(query: string, variables: Record<string, unknown>
     body: JSON.stringify({ query, variables }),
   });
 
+  const result = await response.json() as { data?: T; errors?: Array<{ message: string; extensions?: unknown }> };
+  
   if (!response.ok) {
-    throw new Error(`Railway API error: ${response.status} ${response.statusText}`);
+    console.error('Railway API error response:', JSON.stringify(result, null, 2));
+    const errorMessage = result.errors?.[0]?.message || `${response.status} ${response.statusText}`;
+    throw new Error(`Railway API error: ${errorMessage}`);
   }
-
-  const result = await response.json() as { data?: T; errors?: Array<{ message: string }> };
   
   if (result.errors) {
     throw new Error(`Railway GraphQL error: ${result.errors[0]?.message || 'Unknown error'}`);
@@ -273,7 +277,7 @@ export async function getDomainStatus(domain: string): Promise<DomainStatus | nu
  */
 export function isRailwayConfigured(): boolean {
   return !!(
-    process.env.RAILWAY_API_TOKEN &&
+    process.env.RAILWAY_TOKEN &&
     process.env.RAILWAY_SERVICE_ID &&
     process.env.RAILWAY_ENVIRONMENT_ID
   );

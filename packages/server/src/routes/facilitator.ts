@@ -8,24 +8,41 @@ import type { Hex } from 'viem';
 
 const router: IRouter = Router();
 
-// Validation schemas
+// Payment requirements schema (shared)
+const paymentRequirementsSchema = z.object({
+  scheme: z.string(),
+  network: z.string(),
+  maxAmountRequired: z.string(),
+  resource: z.string().default(''),
+  asset: z.string(), // Token contract address
+  payTo: z.string().optional(),
+  description: z.string().optional(),
+  mimeType: z.string().optional(),
+  maxTimeoutSeconds: z.number().optional(),
+  outputSchema: z.record(z.unknown()).optional(),
+  extra: z.record(z.unknown()).optional(),
+});
+
+// Validation schemas - accept both string (base64) and object for paymentPayload
 const verifyRequestSchema = z.object({
-  x402Version: z.number(),
-  paymentPayload: z.string(),
-  paymentRequirements: z.object({
-    scheme: z.string(),
-    network: z.string(),
-    maxAmountRequired: z.string(),
-    resource: z.string(),
-    asset: z.string(), // Token contract address
-    description: z.string().optional(),
-    mimeType: z.string().optional(),
-    outputSchema: z.record(z.unknown()).optional(),
-    extra: z.record(z.unknown()).optional(),
-  }),
+  x402Version: z.number().optional(), // Some clients omit this
+  paymentPayload: z.union([z.string(), z.object({}).passthrough()]),
+  paymentRequirements: paymentRequirementsSchema,
 });
 
 const settleRequestSchema = verifyRequestSchema;
+
+/**
+ * Normalize paymentPayload to string format
+ * Accepts both base64 string and object, returns string
+ */
+function normalizePaymentPayload(payload: string | object): string {
+  if (typeof payload === 'string') {
+    return payload;
+  }
+  // If it's an object, base64 encode it
+  return Buffer.from(JSON.stringify(payload)).toString('base64');
+}
 
 /**
  * GET /supported - Get supported payment networks and tokens
@@ -90,7 +107,9 @@ router.post('/verify', requireFacilitator, async (req: Request, res: Response) =
       return;
     }
 
-    const { paymentPayload, paymentRequirements } = parsed.data;
+    // Normalize payload - accept both string and object format
+    const paymentPayload = normalizePaymentPayload(parsed.data.paymentPayload);
+    const { paymentRequirements } = parsed.data;
     const record = req.facilitator!;
 
     // Build facilitator config
@@ -148,7 +167,9 @@ router.post('/settle', requireFacilitator, async (req: Request, res: Response) =
       return;
     }
 
-    const { paymentPayload, paymentRequirements } = parsed.data;
+    // Normalize payload - accept both string and object format
+    const paymentPayload = normalizePaymentPayload(parsed.data.paymentPayload);
+    const { paymentRequirements } = parsed.data;
     const record = req.facilitator!;
 
     // Build facilitator config

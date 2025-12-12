@@ -154,3 +154,108 @@ export interface TransactionRecord {
   errorMessage?: string;
   createdAt: Date;
 }
+
+// ============================================
+// Multi-Settle Types
+// ============================================
+
+/**
+ * Multi-settle authorization request
+ * The user signs a spending cap that can be settled multiple times
+ */
+export interface MultiSettleAuthorizationRequest {
+  x402Version?: number;
+  paymentPayload: string | object;
+  paymentRequirements: PaymentRequirements;
+  /** The total spending cap (e.g., "5000000" for $5 USDC) */
+  capAmount: string;
+  /** Unix timestamp when this authorization expires */
+  validUntil: number;
+}
+
+/**
+ * Multi-settle authorization response
+ */
+export interface MultiSettleAuthorizationResponse {
+  success: boolean;
+  /** Unique identifier for this multi-settle authorization */
+  authorizationId?: string;
+  /** The original cap amount */
+  capAmount?: string;
+  /** Current remaining amount */
+  remainingAmount?: string;
+  /** Unix timestamp when this expires */
+  validUntil?: number;
+  /** The nonce from the signature */
+  nonce?: string;
+  errorMessage?: string;
+}
+
+/**
+ * Multi-settle settlement request
+ */
+export interface MultiSettleSettlementRequest {
+  /** The authorization ID returned from the authorize endpoint */
+  authorizationId: string;
+  /** The recipient address for this settlement */
+  payTo: string;
+  /** The amount to settle in this transaction */
+  amount: string;
+}
+
+/**
+ * Multi-settle settlement response
+ */
+export interface MultiSettleSettlementResponse {
+  success: boolean;
+  /** Transaction hash if settled on-chain */
+  transactionHash?: string;
+  /** Remaining amount after this settlement */
+  remainingAmount?: string;
+  /** Network the transaction was settled on */
+  network?: string;
+  errorMessage?: string;
+}
+
+/**
+ * Multi-settle status check response
+ */
+export interface MultiSettleStatusResponse {
+  authorizationId: string;
+  status: 'active' | 'exhausted' | 'expired' | 'revoked';
+  network: string;
+  asset: string;
+  fromAddress: string;
+  capAmount: string;
+  remainingAmount: string;
+  validUntil: number;
+  createdAt: string;
+  settlements: MultiSettleSettlementSummary[];
+}
+
+/**
+ * Summary of a settlement in a multi-settle authorization
+ */
+export interface MultiSettleSettlementSummary {
+  id: string;
+  payTo: string;
+  amount: string;
+  transactionHash?: string;
+  status: 'pending' | 'success' | 'failed';
+  createdAt: string;
+}
+
+/**
+ * Multi-settle revocation request
+ */
+export interface MultiSettleRevocationRequest {
+  authorizationId: string;
+}
+
+/**
+ * Multi-settle revocation response
+ */
+export interface MultiSettleRevocationResponse {
+  success: boolean;
+  errorMessage?: string;
+}

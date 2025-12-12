@@ -4,3 +4,15 @@ export * from './chains.js';
 export * from './tokens.js';
 export * from './erc3009.js';
 export * from './solana.js';
+
+// Re-export multi-settle specific types for convenience
+export type {
+  MultiSettleAuthorizationRequest,
+  MultiSettleAuthorizationResponse,
+  MultiSettleSettlementRequest,
+  MultiSettleSettlementResponse,
+  MultiSettleStatusResponse,
+  MultiSettleSettlementSummary,
+  MultiSettleRevocationRequest,
+  MultiSettleRevocationResponse,
+} from './types.js';

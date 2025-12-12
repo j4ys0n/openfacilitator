@@ -2,6 +2,7 @@ import express, { type Express, type Request, type Response, type NextFunction }
 import cors from 'cors';
 import helmet from 'helmet';
 import { facilitatorRouter } from './routes/facilitator.js';
+import { multiSettleRouter } from './routes/multisettle.js';
 import { adminRouter } from './routes/admin.js';
 import { authRouter } from './routes/auth.js';
 import { publicRouter } from './routes/public.js';
@@ -74,6 +75,9 @@ export function createServer(): Express {
   // Multi-tenant facilitator routes
   // These are resolved by subdomain or custom domain
   app.use('/', resolveFacilitator, facilitatorRouter);
+
+  // Multi-settle routes (for workflow-based multi-recipient settlements)
+  app.use('/multisettle', resolveFacilitator, multiSettleRouter);
 
   // Error handler
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

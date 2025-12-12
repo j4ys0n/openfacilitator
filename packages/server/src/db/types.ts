@@ -57,3 +57,40 @@ export interface DomainVerificationRecord {
   created_at: string;
 }
 
+/**
+ * Multi-settle signature database record
+ * Tracks a pre-authorized spending cap that can be settled multiple times
+ */
+export interface MultiSettleSignatureRecord {
+  id: string;
+  facilitator_id: string;
+  network: string;
+  asset: string;
+  from_address: string;
+  cap_amount: string;          // Original spending cap
+  remaining_amount: string;    // Remaining balance
+  valid_until: number;         // Unix timestamp
+  nonce: string;               // Original signature nonce
+  signature: string;           // The signature
+  payment_payload: string;     // Full payment payload for settlements
+  status: 'active' | 'exhausted' | 'expired' | 'revoked';
+  deposited: number;           // 0 = not yet deposited, 1 = funds deposited to facilitator
+  created_at: string;
+}
+
+/**
+ * Multi-settle settlement database record
+ * Tracks individual settlements against a multi-settle signature
+ */
+export interface MultiSettleSettlementRecord {
+  id: string;
+  signature_id: string;        // Reference to multisettle_signatures
+  facilitator_id: string;
+  pay_to: string;              // Recipient address for this settlement
+  amount: string;              // Amount settled
+  transaction_hash: string | null;
+  status: 'pending' | 'success' | 'failed';
+  error_message: string | null;
+  created_at: string;
+}
+

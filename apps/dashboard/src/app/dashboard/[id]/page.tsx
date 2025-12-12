@@ -56,8 +56,10 @@ export default function FacilitatorDetailPage() {
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isImportWalletOpen, setIsImportWalletOpen] = useState(false);
   const [isImportSolanaWalletOpen, setIsImportSolanaWalletOpen] = useState(false);
+  const [isChangeDomainOpen, setIsChangeDomainOpen] = useState(false);
   const [importPrivateKey, setImportPrivateKey] = useState('');
   const [importSolanaPrivateKey, setImportSolanaPrivateKey] = useState('');
+  const [newDomain, setNewDomain] = useState('');
   const queryClient = useQueryClient();
 
   const { data: facilitator, isLoading } = useQuery({
@@ -76,6 +78,16 @@ export default function FacilitatorDetailPage() {
     mutationFn: () => api.setupDomain(id),
     onSuccess: () => {
       refetchDomainStatus();
+    },
+  });
+
+  const updateDomainMutation = useMutation({
+    mutationFn: (domain: string | null) => api.updateFacilitator(id, { customDomain: domain }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['facilitator', id] });
+      queryClient.invalidateQueries({ queryKey: ['domainStatus', id] });
+      setIsChangeDomainOpen(false);
+      setNewDomain('');
     },
   });
 
@@ -360,9 +372,9 @@ export default function FacilitatorDetailPage() {
                   <Label className="text-muted-foreground">Subdomain</Label>
                   <p className="font-mono">{facilitator.subdomain}.openfacilitator.io</p>
                 </div>
-                {facilitator.customDomain && (
-                  <div>
-                    <Label className="text-muted-foreground">Custom Domain</Label>
+                <div>
+                  <Label className="text-muted-foreground">Custom Domain</Label>
+                  {facilitator.customDomain ? (
                     <div className="flex items-center gap-2">
                       <p className="font-mono">{facilitator.customDomain}</p>
                       {domainStatus?.status === 'active' && (
@@ -372,8 +384,81 @@ export default function FacilitatorDetailPage() {
                         <AlertCircle className="w-4 h-4 text-yellow-500" />
                       )}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <p className="text-muted-foreground text-sm">Not configured</p>
+                  )}
+                  <Dialog open={isChangeDomainOpen} onOpenChange={setIsChangeDomainOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="mt-2">
+                        {facilitator.customDomain ? 'Change Domain' : 'Add Custom Domain'}
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>{facilitator.customDomain ? 'Change Custom Domain' : 'Add Custom Domain'}</DialogTitle>
+                        <DialogDescription>
+                          {facilitator.customDomain 
+                            ? `Current domain: ${facilitator.customDomain}. Enter a new domain to replace it.`
+                            : 'Enter your custom domain to use instead of the default subdomain.'
+                          }
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="newDomain">Domain</Label>
+                          <Input
+                            id="newDomain"
+                            placeholder="pay.yourdomain.com"
+                            value={newDomain}
+                            onChange={(e) => setNewDomain(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
+                          />
+                        </div>
+                        <div className="rounded-lg bg-muted/50 p-4 text-sm">
+                          <div className="font-medium mb-2">DNS Setup Required</div>
+                          <div className="text-muted-foreground space-y-1">
+                            <p>After saving, add a CNAME record pointing to:</p>
+                            <code className="block bg-background px-2 py-1 rounded text-xs font-mono mt-1">
+                              api.openfacilitator.io
+                            </code>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex justify-between">
+                        {facilitator.customDomain && (
+                          <Button
+                            variant="destructive"
+                            onClick={() => {
+                              if (confirm('Remove custom domain? The subdomain will still work.')) {
+                                updateDomainMutation.mutate(null);
+                              }
+                            }}
+                            disabled={updateDomainMutation.isPending}
+                          >
+                            Remove Domain
+                          </Button>
+                        )}
+                        <div className="flex gap-2 ml-auto">
+                          <Button variant="outline" onClick={() => setIsChangeDomainOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={() => updateDomainMutation.mutate(newDomain)}
+                            disabled={!newDomain || updateDomainMutation.isPending}
+                          >
+                            {updateDomainMutation.isPending ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              'Save Domain'
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
                 <div>
                   <Label className="text-muted-foreground">Owner Address</Label>
                   <p className="font-mono text-sm">{formatAddress(facilitator.ownerAddress)}</p>

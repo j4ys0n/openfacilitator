@@ -99,6 +99,40 @@ export function initializeDatabase(dbPath?: string): Database.Database {
       FOREIGN KEY (facilitator_id) REFERENCES facilitators(id) ON DELETE CASCADE
     );
 
+    -- Multi-settle signatures table
+    CREATE TABLE IF NOT EXISTS multisettle_signatures (
+      id TEXT PRIMARY KEY,
+      facilitator_id TEXT NOT NULL,
+      network TEXT NOT NULL,
+      asset TEXT NOT NULL,
+      from_address TEXT NOT NULL,
+      cap_amount TEXT NOT NULL,
+      remaining_amount TEXT NOT NULL,
+      valid_until INTEGER NOT NULL,
+      nonce TEXT NOT NULL,
+      signature TEXT NOT NULL,
+      payment_payload TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'exhausted', 'expired', 'revoked')),
+      deposited INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (facilitator_id) REFERENCES facilitators(id) ON DELETE CASCADE
+    );
+
+    -- Multi-settle settlements table
+    CREATE TABLE IF NOT EXISTS multisettle_settlements (
+      id TEXT PRIMARY KEY,
+      signature_id TEXT NOT NULL,
+      facilitator_id TEXT NOT NULL,
+      pay_to TEXT NOT NULL,
+      amount TEXT NOT NULL,
+      transaction_hash TEXT,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'success', 'failed')),
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (signature_id) REFERENCES multisettle_signatures(id) ON DELETE CASCADE,
+      FOREIGN KEY (facilitator_id) REFERENCES facilitators(id) ON DELETE CASCADE
+    );
+
     -- Indexes
     CREATE INDEX IF NOT EXISTS idx_facilitators_subdomain ON facilitators(subdomain);
     CREATE INDEX IF NOT EXISTS idx_facilitators_custom_domain ON facilitators(custom_domain);
@@ -106,6 +140,10 @@ export function initializeDatabase(dbPath?: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_transactions_facilitator ON transactions(facilitator_id);
     CREATE INDEX IF NOT EXISTS idx_transactions_created ON transactions(created_at);
     CREATE INDEX IF NOT EXISTS idx_users_wallet ON users(wallet_address);
+    CREATE INDEX IF NOT EXISTS idx_multisettle_sig_facilitator ON multisettle_signatures(facilitator_id);
+    CREATE INDEX IF NOT EXISTS idx_multisettle_sig_nonce ON multisettle_signatures(nonce);
+    CREATE INDEX IF NOT EXISTS idx_multisettle_sig_status ON multisettle_signatures(status);
+    CREATE INDEX IF NOT EXISTS idx_multisettle_settlements_sig ON multisettle_settlements(signature_id);
 
     -- Better Auth tables
     CREATE TABLE IF NOT EXISTS "user" (
@@ -176,5 +214,6 @@ export function closeDatabase(): void {
 
 export * from './facilitators.js';
 export * from './transactions.js';
+export * from './multisettle.js';
 export * from './types.js';
 

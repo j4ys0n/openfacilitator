@@ -301,8 +301,8 @@ const handler = createPaymentHandler({
             <div className="flex items-center justify-center gap-2 mb-8 text-sm text-muted-foreground">
               <Wallet className="w-4 h-4" />
               <span>Your wallet balance: <strong className="text-foreground">${billingWallet.balance} USDC</strong></span>
-              <Link href="/dashboard/account" className="text-primary hover:underline ml-2">
-                Fund wallet
+              <Link href="/dashboard" className="text-primary hover:underline ml-2">
+                Go to dashboard
               </Link>
             </div>
           )}

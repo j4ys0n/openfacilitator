@@ -23,10 +23,11 @@ function getMemeputerEndpoint(): string {
 const router: IRouter = Router();
 
 // Validation schema for activate endpoint
-// Memeputer only sends userId - payment is handled before webhook
+// Memeputer sends tier as 'basic' from command name (subscribe_basic)
+// We map this to our internal 'starter' tier
 const activateSchema = z.object({
   userId: z.string().min(1),
-  tier: z.enum(['starter']).optional().default('starter'),
+  tier: z.enum(['starter', 'basic']).optional().default('starter'),
 });
 
 /**

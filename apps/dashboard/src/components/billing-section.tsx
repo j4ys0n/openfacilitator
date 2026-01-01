@@ -1,8 +1,6 @@
 'use client';
 
-import Link from 'next/link';
 import { Wallet } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { formatDate } from '@/lib/utils';
 import type { Facilitator } from '@/lib/api';
 
@@ -50,16 +48,9 @@ export function BillingSection({ facilitators, walletBalance, subscription }: Bi
           Billing Wallet
         </p>
         <p className="text-2xl font-bold">${walletBalance}</p>
-        <div className="flex items-center justify-between mt-2">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Wallet className="w-4 h-4" />
-            <span>USDC on Solana</span>
-          </div>
-          <Link href="/dashboard/account">
-            <Button variant="outline" size="sm">
-              Manage
-            </Button>
-          </Link>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+          <Wallet className="w-4 h-4" />
+          <span>USDC on Solana</span>
         </div>
       </div>
     </div>

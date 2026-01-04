@@ -13,7 +13,7 @@ import { makeX402Payment } from '../services/x402-client.js';
 import { requireAuth } from '../middleware/auth.js';
 
 // x402jobs payment endpoint
-const X402_JOBS_PAYMENT_URL = process.env.X402_JOBS_PAYMENT_URL || 'https://api.x402.jobs/@rawgroundbeef/openfacilitator-payment-collector';
+const X402_JOBS_PAYMENT_URL = process.env.X402_JOBS_PAYMENT_URL || 'https://api.x402.jobs/@openfacilitator/openfacilitator-payment-collector';
 
 const router: IRouter = Router();
 

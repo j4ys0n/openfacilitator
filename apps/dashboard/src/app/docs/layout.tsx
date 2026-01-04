@@ -40,10 +40,10 @@ export default function DocsLayout({
     <div className="min-h-screen bg-background">
       <Navbar />
       
-      <div className="max-w-7xl mx-auto px-4 lg:px-6 pt-20">
-        <div className="flex">
+      <div className="max-w-7xl mx-auto px-4 lg:px-6 pt-20 min-h-[calc(100vh-5rem)]">
+        <div className="flex min-h-full">
           {/* Desktop sidebar - hidden on mobile */}
-          <aside className="hidden lg:block w-64 shrink-0 border-r border-border">
+          <aside className="hidden lg:block w-64 shrink-0 border-r border-border min-h-[calc(100vh-5rem)]">
             <div className="sticky top-20 pr-6">
               <Sidebar />
             </div>

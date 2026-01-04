@@ -99,11 +99,19 @@ function DnsSetupDialog({
   const domain = facilitator?.customDomain || '';
   const subdomain = domain.split('.')[0] || 'x402';
 
-  const { cnameValue, cnameName: apiCnameName, cnameType } = useDomainStatus(
+  const { cnameValue, cnameName: apiCnameName, cnameType, isActive, isLoading: isDnsLoading } = useDomainStatus(
     facilitator?.id,
     !!facilitator?.customDomain && open
   );
   const cnameName = apiCnameName || subdomain;
+
+  // If domain is already active, close dialog and redirect
+  useEffect(() => {
+    if (open && isActive && facilitator) {
+      onOpenChange(false);
+      onDnsVerified?.();
+    }
+  }, [open, isActive, facilitator, onOpenChange, onDnsVerified]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(cnameValue);
@@ -239,7 +247,14 @@ function DnsSetupDialog({
           )}
         </div>
 
-        {cnameValue ? (
+        {isDnsLoading ? (
+          <div className="rounded-xl border border-border bg-muted/30 p-5 flex items-center justify-center gap-3">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              Loading DNS configuration...
+            </p>
+          </div>
+        ) : cnameValue ? (
           <div className="rounded-xl border border-border bg-muted/30 p-5 space-y-4">
             <div className="grid grid-cols-[80px_1fr] gap-2 text-sm">
               <span className="text-muted-foreground">Type:</span>
@@ -270,7 +285,7 @@ function DnsSetupDialog({
         ) : (
           <div className="rounded-xl border border-border bg-muted/30 p-5">
             <p className="text-sm text-muted-foreground">
-              Loading DNS configuration from Railway...
+              Unable to load DNS configuration. Please try again later.
             </p>
           </div>
         )}
@@ -318,7 +333,6 @@ export default function DashboardPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [dnsSetupOpen, setDnsSetupOpen] = useState(false);
   const [dnsSetupFacilitator, setDnsSetupFacilitator] = useState<Facilitator | null>(null);
-  const [isCheckingDomain, setIsCheckingDomain] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -356,31 +370,16 @@ export default function DashboardPage() {
     }
   };
 
-  const handleManageClick = async (facilitator: Facilitator) => {
-    // If no custom domain, just go to dashboard (shouldn't happen with current flow)
+  const handleManageClick = (facilitator: Facilitator) => {
+    // If no custom domain, just go to dashboard
     if (!facilitator.customDomain) {
       router.push(`/dashboard/${facilitator.id}`);
       return;
     }
 
-    setIsCheckingDomain(true);
-    try {
-      const status = await api.getDomainStatus(facilitator.id);
-      if (status.status === 'active') {
-        // Domain is verified, navigate to dashboard
-        router.push(`/dashboard/${facilitator.id}`);
-      } else {
-        // Domain not verified yet, show DNS setup dialog
-        setDnsSetupFacilitator(facilitator);
-        setDnsSetupOpen(true);
-      }
-    } catch {
-      // On error, show DNS setup dialog
-      setDnsSetupFacilitator(facilitator);
-      setDnsSetupOpen(true);
-    } finally {
-      setIsCheckingDomain(false);
-    }
+    // Open DNS setup dialog - it will check status and either show setup or redirect
+    setDnsSetupFacilitator(facilitator);
+    setDnsSetupOpen(true);
   };
 
   if (authLoading) {
@@ -496,12 +495,6 @@ export default function DashboardPage() {
         onFacilitatorUpdated={setDnsSetupFacilitator}
       />
 
-      {/* Loading overlay when checking domain status */}
-      {isCheckingDomain && (
-        <div className="fixed inset-0 bg-background/50 flex items-center justify-center z-50">
-          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
-        </div>
-      )}
     </div>
   );
 }

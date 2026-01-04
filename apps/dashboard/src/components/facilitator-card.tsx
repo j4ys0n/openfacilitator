@@ -145,7 +145,7 @@ export function FacilitatorCard({ facilitator, onManageClick }: FacilitatorCardP
         </div>
 
         {/* Stats */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
           <span>{networksConfigured} chain{networksConfigured !== 1 ? 's' : ''}</span>
           <span>·</span>
           <span>${formatNumber(totalSettled)} settled</span>

@@ -31,6 +31,16 @@ interface X402SdkResource {
   network: string;
   price: string;
   description?: string;
+  // Trust/reliability fields
+  success_rate?: number;
+  calls?: number;
+  value_processed?: string;
+  last_called?: string;
+  // Additional metadata
+  x402jobs_url?: string;
+  avatar_url?: string;
+  slug?: string;
+  server_slug?: string;
   [key: string]: unknown;
 }
 
@@ -45,6 +55,16 @@ interface Resource {
     asset: string;
     amount: string;
   };
+  // Trust scores
+  trustScore: {
+    successRate: number;
+    calls: number;
+    valueProcessed: string;
+    lastCalled: string;
+  };
+  // Metadata
+  x402jobsUrl?: string;
+  avatarUrl?: string;
 }
 
 interface ListResponse {
@@ -76,6 +96,14 @@ function mapResource(r: X402SdkResource): Resource {
       asset: NETWORK_ASSETS[network] || NETWORK_ASSETS.solana,
       amount: r.price || '0',
     },
+    trustScore: {
+      successRate: r.success_rate ?? 0,
+      calls: r.calls ?? 0,
+      valueProcessed: r.value_processed ?? '$0',
+      lastCalled: r.last_called ?? 'never',
+    },
+    x402jobsUrl: r.x402jobs_url,
+    avatarUrl: r.avatar_url,
   };
 }
 

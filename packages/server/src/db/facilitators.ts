@@ -115,6 +115,8 @@ export function updateFacilitator(
     encrypted_private_key: string;
     encrypted_solana_private_key: string;
     favicon: string | null;
+    webhook_url: string;
+    webhook_secret: string;
   }>
 ): FacilitatorRecord | null {
   const db = getDatabase();
@@ -154,6 +156,14 @@ export function updateFacilitator(
   if (updates.favicon !== undefined) {
     fields.push('favicon = ?');
     values.push(updates.favicon);
+  }
+  if (updates.webhook_url !== undefined) {
+    fields.push('webhook_url = ?');
+    values.push(updates.webhook_url || null);
+  }
+  if (updates.webhook_secret !== undefined) {
+    fields.push('webhook_secret = ?');
+    values.push(updates.webhook_secret || null);
   }
 
   if (fields.length === 0) {

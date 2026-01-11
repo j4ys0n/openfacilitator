@@ -334,6 +334,44 @@ class ApiClient {
     });
   }
 
+  // Webhook Management
+  async getWebhook(facilitatorId: string): Promise<{ webhookUrl: string | null; hasSecret: boolean }> {
+    return this.request(`/api/admin/facilitators/${facilitatorId}/webhook`);
+  }
+
+  async setWebhook(facilitatorId: string, url: string | null): Promise<{
+    success: boolean;
+    webhookUrl: string | null;
+    webhookSecret: string | null;
+    message: string;
+  }> {
+    return this.request(`/api/admin/facilitators/${facilitatorId}/webhook`, {
+      method: 'PUT',
+      body: JSON.stringify({ url }),
+    });
+  }
+
+  async regenerateWebhookSecret(facilitatorId: string): Promise<{
+    success: boolean;
+    webhookSecret: string;
+    message: string;
+  }> {
+    return this.request(`/api/admin/facilitators/${facilitatorId}/webhook/regenerate`, {
+      method: 'POST',
+    });
+  }
+
+  async testWebhook(facilitatorId: string): Promise<{
+    success: boolean;
+    message: string;
+    error?: string;
+    statusCode?: number;
+  }> {
+    return this.request(`/api/admin/facilitators/${facilitatorId}/webhook/test`, {
+      method: 'POST',
+    });
+  }
+
   // Billing Wallet (user's subscription wallet)
   async getBillingWallet(): Promise<BillingWallet> {
     return this.request('/api/admin/wallet');

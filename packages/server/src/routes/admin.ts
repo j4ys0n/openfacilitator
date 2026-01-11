@@ -39,6 +39,7 @@ import {
 } from '../services/railway.js';
 import { encryptPrivateKey, decryptPrivateKey, generateWallet } from '../utils/crypto.js';
 import { generateWalletForUser, getWalletForUser, getUSDCBalance } from '../services/wallet.js';
+import { generateWebhookSecret, deliverWebhook } from '../services/webhook.js';
 import type { Hex } from 'viem';
 
 const router: IRouter = Router();
@@ -86,6 +87,7 @@ const updateFacilitatorSchema = z.object({
       })
     )
     .optional(),
+  webhookUrl: z.string().url().max(2048).optional().nullable(),
 });
 
 /**
@@ -329,6 +331,21 @@ router.patch('/facilitators/:id', requireAuth, async (req: Request, res: Respons
     }
     if (parsed.data.supportedTokens) {
       updates.supported_tokens = JSON.stringify(parsed.data.supportedTokens);
+    }
+    // Handle webhook URL updates
+    if (parsed.data.webhookUrl !== undefined) {
+      const existingFacilitator = getFacilitatorById(req.params.id);
+      if (parsed.data.webhookUrl) {
+        updates.webhook_url = parsed.data.webhookUrl;
+        // Auto-generate secret if setting URL for the first time
+        if (!existingFacilitator?.webhook_secret) {
+          updates.webhook_secret = generateWebhookSecret();
+        }
+      } else {
+        // Clear webhook when URL is set to null/empty
+        updates.webhook_url = '';
+        updates.webhook_secret = '';
+      }
     }
 
     const facilitator = updateFacilitator(req.params.id, updates);
@@ -1261,6 +1278,190 @@ router.get('/facilitators/:id/favicon', requireAuth, async (req: Request, res: R
     });
   } catch (error) {
     console.error('Get favicon error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ============= WEBHOOK ENDPOINTS =============
+
+/**
+ * GET /api/admin/facilitators/:id/webhook - Get webhook configuration
+ * Returns URL and whether a secret exists (but not the secret itself for security)
+ */
+router.get('/facilitators/:id/webhook', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const facilitator = getFacilitatorById(req.params.id);
+    if (!facilitator) {
+      res.status(404).json({ error: 'Facilitator not found' });
+      return;
+    }
+
+    res.json({
+      webhookUrl: facilitator.webhook_url || null,
+      hasSecret: !!facilitator.webhook_secret,
+      // Only return secret on initial setup or regeneration
+    });
+  } catch (error) {
+    console.error('Get webhook error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * PUT /api/admin/facilitators/:id/webhook - Set webhook URL (generates secret if needed)
+ */
+router.put('/facilitators/:id/webhook', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body;
+
+    if (url && typeof url !== 'string') {
+      res.status(400).json({ error: 'Invalid URL' });
+      return;
+    }
+
+    // Validate URL format if provided
+    if (url) {
+      try {
+        new URL(url);
+      } catch {
+        res.status(400).json({ error: 'Invalid URL format' });
+        return;
+      }
+    }
+
+    const facilitator = getFacilitatorById(req.params.id);
+    if (!facilitator) {
+      res.status(404).json({ error: 'Facilitator not found' });
+      return;
+    }
+
+    const updates: Record<string, string> = {};
+    let newSecret: string | null = null;
+
+    if (url) {
+      updates.webhook_url = url;
+      // Generate secret if setting URL for the first time
+      if (!facilitator.webhook_secret) {
+        newSecret = generateWebhookSecret();
+        updates.webhook_secret = newSecret;
+      }
+    } else {
+      // Clear webhook
+      updates.webhook_url = '';
+      updates.webhook_secret = '';
+    }
+
+    const updated = updateFacilitator(req.params.id, updates);
+    if (!updated) {
+      res.status(500).json({ error: 'Failed to update webhook' });
+      return;
+    }
+
+    res.json({
+      success: true,
+      webhookUrl: url || null,
+      // Only return secret when newly generated
+      webhookSecret: newSecret,
+      message: newSecret
+        ? 'Webhook configured. Save your secret - it won\'t be shown again.'
+        : url ? 'Webhook URL updated.' : 'Webhook removed.',
+    });
+  } catch (error) {
+    console.error('Update webhook error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/admin/facilitators/:id/webhook/regenerate - Regenerate webhook secret
+ */
+router.post('/facilitators/:id/webhook/regenerate', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const facilitator = getFacilitatorById(req.params.id);
+    if (!facilitator) {
+      res.status(404).json({ error: 'Facilitator not found' });
+      return;
+    }
+
+    if (!facilitator.webhook_url) {
+      res.status(400).json({ error: 'No webhook URL configured' });
+      return;
+    }
+
+    const newSecret = generateWebhookSecret();
+    const updated = updateFacilitator(req.params.id, { webhook_secret: newSecret });
+
+    if (!updated) {
+      res.status(500).json({ error: 'Failed to regenerate secret' });
+      return;
+    }
+
+    res.json({
+      success: true,
+      webhookSecret: newSecret,
+      message: 'Secret regenerated. Update your webhook handler with the new secret.',
+    });
+  } catch (error) {
+    console.error('Regenerate webhook secret error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/admin/facilitators/:id/webhook/test - Send a test webhook
+ */
+router.post('/facilitators/:id/webhook/test', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const facilitator = getFacilitatorById(req.params.id);
+    if (!facilitator) {
+      res.status(404).json({ error: 'Facilitator not found' });
+      return;
+    }
+
+    if (!facilitator.webhook_url || !facilitator.webhook_secret) {
+      res.status(400).json({ error: 'Webhook not configured' });
+      return;
+    }
+
+    const testPayload = {
+      event: 'payment.settled' as const,
+      facilitatorId: facilitator.id,
+      timestamp: new Date().toISOString(),
+      transaction: {
+        id: 'test_' + Date.now(),
+        fromAddress: '0x0000000000000000000000000000000000000000',
+        toAddress: facilitator.owner_address,
+        amount: '1000000',
+        asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // USDC on Base
+        network: 'base',
+        transactionHash: '0x' + '0'.repeat(64),
+        settledAt: new Date().toISOString(),
+      },
+    };
+
+    const result = await deliverWebhook(
+      facilitator.webhook_url,
+      facilitator.webhook_secret,
+      testPayload,
+      1 // Only 1 attempt for test
+    );
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Test webhook delivered successfully',
+        statusCode: result.statusCode,
+      });
+    } else {
+      res.json({
+        success: false,
+        message: 'Test webhook delivery failed',
+        error: result.error,
+        statusCode: result.statusCode,
+      });
+    }
+  } catch (error) {
+    console.error('Test webhook error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

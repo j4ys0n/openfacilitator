@@ -54,6 +54,18 @@ export function initializeDatabase(dbPath?: string): Database.Database {
       db.exec("ALTER TABLE facilitators ADD COLUMN favicon TEXT");
       console.log('✅ Added favicon column to facilitators table');
     }
+
+    // Add webhook columns if they don't exist
+    const hasWebhookUrl = columns.some(col => col.name === 'webhook_url');
+    if (!hasWebhookUrl) {
+      db.exec("ALTER TABLE facilitators ADD COLUMN webhook_url TEXT");
+      console.log('✅ Added webhook_url column to facilitators table');
+    }
+    const hasWebhookSecret = columns.some(col => col.name === 'webhook_secret');
+    if (!hasWebhookSecret) {
+      db.exec("ALTER TABLE facilitators ADD COLUMN webhook_secret TEXT");
+      console.log('✅ Added webhook_secret column to facilitators table');
+    }
   } catch (e) {
     // Table might not exist yet, that's fine
   }
@@ -106,6 +118,8 @@ export function initializeDatabase(dbPath?: string): Database.Database {
       encrypted_private_key TEXT,
       encrypted_solana_private_key TEXT,
       favicon TEXT,
+      webhook_url TEXT,
+      webhook_secret TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

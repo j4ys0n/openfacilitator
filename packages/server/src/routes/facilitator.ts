@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireFacilitator } from '../middleware/tenant.js';
 import { createTransaction, updateTransactionStatus } from '../db/transactions.js';
 import { decryptPrivateKey } from '../utils/crypto.js';
+import { sendSettlementWebhook } from '../services/webhook.js';
 import type { Hex } from 'viem';
 
 const router: IRouter = Router();
@@ -332,6 +333,24 @@ router.post('/settle', requireFacilitator, async (req: Request, res: Response) =
       // Update to success after transaction is confirmed
       // TODO: Implement transaction confirmation monitoring
       updateTransactionStatus(transaction.id, 'success');
+
+      // Send webhook notification (fire and forget)
+      if (record.webhook_url && record.webhook_secret) {
+        sendSettlementWebhook(
+          record.webhook_url,
+          record.webhook_secret,
+          record.id,
+          {
+            id: transaction.id,
+            fromAddress: fromAddress,
+            toAddress: record.owner_address,
+            amount: paymentRequirements.maxAmountRequired,
+            asset: paymentRequirements.asset,
+            network: paymentRequirements.network,
+            transactionHash: result.transactionHash || null,
+          }
+        );
+      }
     }
 
     res.json(result);

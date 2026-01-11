@@ -40,6 +40,7 @@ import { Navbar } from '@/components/navbar';
 import { NetworksSection, useNetworkStats } from '@/components/networks-section';
 import { TransactionsTable } from '@/components/transactions-table';
 import { SettlementActivityChart } from '@/components/settlement-activity-chart';
+import { WebhookSettings } from '@/components/webhook-settings';
 
 type Tab = 'transactions' | 'settings';
 
@@ -747,6 +748,9 @@ export default function FacilitatorDetailPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Webhooks */}
+            <WebhookSettings facilitatorId={id} />
 
             {/* Danger Zone */}
             <Card className="border-red-500/50 dark:border-red-900/50 bg-red-500/5 dark:bg-red-950/20">

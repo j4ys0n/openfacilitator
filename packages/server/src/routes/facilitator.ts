@@ -1059,7 +1059,7 @@ router.get('/pay/:linkId', async (req: Request, res: Response) => {
           return new window.solanaWeb3.TransactionInstruction({
             keys,
             programId: TOKEN_PROGRAM_ID,
-            data: Buffer.from(data)
+            data: data
           });
         },
 
@@ -1076,7 +1076,7 @@ router.get('/pay/:linkId', async (req: Request, res: Response) => {
           return new window.solanaWeb3.TransactionInstruction({
             keys,
             programId: ASSOCIATED_TOKEN_PROGRAM_ID,
-            data: Buffer.from([])
+            data: new Uint8Array(0)
           });
         },
 

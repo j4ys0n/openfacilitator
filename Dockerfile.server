@@ -26,8 +26,8 @@ FROM node:20-alpine AS runner
 
 RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
 
-# Install wget for healthcheck
-RUN apk add --no-cache wget
+# Install wget for healthcheck and build dependencies for native modules
+RUN apk add --no-cache wget python3 make g++
 
 WORKDIR /app
 
@@ -40,8 +40,11 @@ COPY --from=builder /app/packages/server/package.json ./packages/server/
 # Copy workspace config
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-# Install production dependencies only
+# Install production dependencies (with native module compilation)
 RUN pnpm install --frozen-lockfile --prod
+
+# Remove build dependencies to reduce image size (keep wget for healthcheck)
+RUN apk del python3 make g++
 
 # Create data directory with proper permissions
 RUN mkdir -p /data && chmod 755 /data

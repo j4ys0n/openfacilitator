@@ -326,12 +326,12 @@ router.get('/free/info', (_req: Request, res: Response) => {
   const solanaAddress = process.env.FREE_FACILITATOR_SOLANA_ADDRESS;
 
   res.json({
-    name: 'OpenFacilitator Free',
+    name: 'AtomicStream (OpenFacilitator Free)',
     description: 'Free public x402 payment facilitator. No account required.',
     endpoints: {
-      supported: 'https://api.openfacilitator.io/free/supported',
-      verify: 'https://api.openfacilitator.io/free/verify',
-      settle: 'https://api.openfacilitator.io/free/settle',
+      supported: 'https://x402.atomicstream.net/free/supported',
+      verify: 'https://x402.atomicstream.net/free/verify',
+      settle: 'https://x402.atomicstream.net/free/settle',
     },
     networks: {
       base: facilitatorData?.evmPrivateKey ? {

@@ -3,8 +3,56 @@
 import { useState } from 'react';
 import { ExternalLink, ArrowUpRight, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { formatAddress, formatDate } from '@/lib/utils';
+import { formatAddress, formatDate, isValidAddressFormat } from '@/lib/utils';
 import type { Transaction } from '@/lib/api';
+
+/**
+ * Get explorer URL for an address based on network
+ */
+function getAddressExplorerUrl(address: string, network: string): string | null {
+  if (!isValidAddressFormat(address)) return null;
+
+  if (network === 'solana' || network === 'solana-mainnet') {
+    return `https://solscan.io/account/${address}`;
+  }
+  if (network === 'solana-devnet') {
+    return `https://solscan.io/account/${address}?cluster=devnet`;
+  }
+  if (network === '8453' || network === 'base') {
+    return `https://basescan.org/address/${address}`;
+  }
+  if (network === '84532' || network === 'base-sepolia') {
+    return `https://sepolia.basescan.org/address/${address}`;
+  }
+  if (network === '1' || network === 'ethereum') {
+    return `https://etherscan.io/address/${address}`;
+  }
+  return null;
+}
+
+/**
+ * Render an address with optional explorer link
+ */
+function AddressLink({ address, network }: { address: string; network: string }) {
+  const explorerUrl = getAddressExplorerUrl(address, network);
+  const displayAddress = formatAddress(address);
+
+  if (explorerUrl) {
+    return (
+      <a
+        href={explorerUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="hover:text-foreground hover:underline"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {displayAddress}
+      </a>
+    );
+  }
+
+  return <span>{displayAddress}</span>;
+}
 
 interface TransactionsTableProps {
   transactions: Transaction[];
@@ -87,6 +135,7 @@ export function TransactionsTable({ transactions, pageSize = 20 }: TransactionsT
           <thead className="bg-muted/50">
             <tr>
               <th className="text-left py-3 px-4 font-medium text-muted-foreground">Type</th>
+              <th className="text-left py-3 px-4 font-medium text-muted-foreground">Transaction</th>
               <th className="text-left py-3 px-4 font-medium text-muted-foreground">From / To</th>
               <th className="text-right py-3 px-4 font-medium text-muted-foreground">Amount</th>
               <th className="text-left py-3 px-4 font-medium text-muted-foreground">Time</th>
@@ -113,21 +162,28 @@ export function TransactionsTable({ transactions, pageSize = 20 }: TransactionsT
                         </div>
                       )}
                       <span className="capitalize">{tx.type}</span>
-                      {explorerUrl && (
-                        <a
-                          href={explorerUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-foreground"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
                     </div>
                   </td>
+                  <td className="py-3 px-4 font-mono text-xs">
+                    {explorerUrl && tx.transactionHash ? (
+                      <a
+                        href={explorerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground hover:text-foreground hover:underline flex items-center gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {tx.transactionHash.slice(0, 8)}...{tx.transactionHash.slice(-6)}
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="py-3 px-4 font-mono text-xs text-muted-foreground">
-                    {formatAddress(tx.fromAddress)} → {formatAddress(tx.toAddress)}
+                    <AddressLink address={tx.fromAddress} network={tx.network} />
+                    {' → '}
+                    <AddressLink address={tx.toAddress} network={tx.network} />
                   </td>
                   <td className="py-3 px-4 text-right font-mono">
                     {tx.amount}

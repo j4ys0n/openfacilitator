@@ -12,6 +12,14 @@ on:
         description: 'API URL for dashboard (NEXT_PUBLIC_API_URL)'
         required: false
         default: ''
+      self_hosted:
+        description: 'Enable self-hosted mode (skips payment for facilitator creation)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
   contents: read
@@ -57,6 +65,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           build-args: |
             NEXT_PUBLIC_API_URL=${{ inputs.api_url || vars.NEXT_PUBLIC_API_URL || 'http://localhost:5002' }}
+            NEXT_PUBLIC_SELF_HOSTED=${{ inputs.self_hosted || vars.NEXT_PUBLIC_SELF_HOSTED || 'false' }}
           tags: |
             ghcr.io/${{ github.repository }}-${{ matrix.image }}:latest
             ghcr.io/${{ github.repository }}-${{ matrix.image }}:${{ github.sha }}

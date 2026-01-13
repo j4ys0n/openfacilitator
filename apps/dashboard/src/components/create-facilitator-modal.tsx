@@ -22,6 +22,9 @@ const SUBSCRIPTION_PAYMENT_URLS = {
   solana: process.env.NEXT_PUBLIC_SUBSCRIPTION_PAYMENT_URL_SOLANA || 'https://pay.openfacilitator.io/pay/9H_WKcSOnPAQNJlglx348',
 };
 
+// Self-hosted mode skips payment requirement
+const IS_SELF_HOSTED = process.env.NEXT_PUBLIC_SELF_HOSTED === 'true';
+
 type Network = 'base' | 'solana';
 
 interface CreateFacilitatorModalProps {
@@ -41,6 +44,36 @@ export function CreateFacilitatorModal({
   const [domain, setDomain] = useState('');
   const [selectedNetwork, setSelectedNetwork] = useState<Network | null>(null);
   const { toast } = useToast();
+
+  // Direct creation mutation (for self-hosted mode)
+  const createMutation = useMutation({
+    mutationFn: async (data: { name: string; customDomain: string }) => {
+      // Generate subdomain from domain (e.g., pay.example.com -> pay-example-com)
+      const subdomain = data.customDomain.replace(/\./g, '-').toLowerCase();
+      return api.createFacilitator({
+        name: data.name,
+        subdomain,
+        customDomain: data.customDomain,
+      });
+    },
+    onSuccess: (facilitator) => {
+      toast({
+        title: 'Facilitator created!',
+        description: 'You can now configure your wallet and DNS settings.',
+      });
+      onSuccess(facilitator);
+      onOpenChange(false);
+      setName('');
+      setDomain('');
+    },
+    onError: (error) => {
+      toast({
+        title: 'Failed to create facilitator',
+        description: error instanceof Error ? error.message : 'Something went wrong',
+        variant: 'destructive',
+      });
+    },
+  });
 
   const pendingMutation = useMutation({
     mutationFn: async (data: { name: string; customDomain: string }) => {
@@ -74,15 +107,27 @@ export function CreateFacilitatorModal({
     },
   });
 
-  const handlePayAndCreate = () => {
-    if (!name.trim() || !domain.trim() || !selectedNetwork) return;
-    pendingMutation.mutate({
-      name: name.trim(),
-      customDomain: domain.trim(),
-    });
+  const handleCreate = () => {
+    if (!name.trim() || !domain.trim()) return;
+
+    if (IS_SELF_HOSTED) {
+      // Self-hosted: create directly without payment
+      createMutation.mutate({
+        name: name.trim(),
+        customDomain: domain.trim(),
+      });
+    } else {
+      // Hosted: require payment
+      if (!selectedNetwork) return;
+      pendingMutation.mutate({
+        name: name.trim(),
+        customDomain: domain.trim(),
+      });
+    }
   };
 
   const isFormValid = name.trim() && domain.trim();
+  const isPending = createMutation.isPending || pendingMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -121,64 +166,74 @@ export function CreateFacilitatorModal({
             </p>
           </div>
 
-          <div className="bg-muted/50 rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Cost</span>
-              <span className="font-semibold">$5.00 USDC/month</span>
-            </div>
-
-            <div className="space-y-2">
-              <span className="text-sm">Pay with</span>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedNetwork('base')}
-                  disabled={!isFormValid}
-                  className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors ${
-                    selectedNetwork === 'base'
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50'
-                  } ${!isFormValid ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                >
-                  <svg width="20" height="20" viewBox="0 0 111 111" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="55.5" cy="55.5" r="55.5" fill="#0052FF"/>
-                    <path d="M55.5 96C77.8675 96 96 77.8675 96 55.5C96 33.1325 77.8675 15 55.5 15C33.1325 15 15 33.1325 15 55.5C15 77.8675 33.1325 96 55.5 96Z" fill="#0052FF"/>
-                    <path d="M55.5 85C71.793 85 85 71.793 85 55.5C85 39.207 71.793 26 55.5 26C39.207 26 26 39.207 26 55.5C26 71.793 39.207 85 55.5 85Z" fill="white"/>
-                  </svg>
-                  <span className="font-medium">Base</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedNetwork('solana')}
-                  disabled={!isFormValid}
-                  className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors ${
-                    selectedNetwork === 'solana'
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50'
-                  } ${!isFormValid ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                >
-                  <svg width="20" height="20" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="64" cy="64" r="64" fill="url(#solana-gradient)"/>
-                    <path d="M36.5 79.3c.6-.6 1.4-1 2.3-1h53.3c1.5 0 2.2 1.8 1.1 2.8l-10.9 10.9c-.6.6-1.4 1-2.3 1H26.7c-1.5 0-2.2-1.8-1.1-2.8l10.9-10.9z" fill="white"/>
-                    <path d="M36.5 35c.6-.6 1.4-1 2.3-1h53.3c1.5 0 2.2 1.8 1.1 2.8L82.3 47.7c-.6.6-1.4 1-2.3 1H26.7c-1.5 0-2.2-1.8-1.1-2.8L36.5 35z" fill="white"/>
-                    <path d="M82.3 57c-.6-.6-1.4-1-2.3-1H26.7c-1.5 0-2.2 1.8-1.1 2.8l10.9 10.9c.6.6 1.4 1 2.3 1h53.3c1.5 0 2.2-1.8 1.1-2.8L82.3 57z" fill="white"/>
-                    <defs>
-                      <linearGradient id="solana-gradient" x1="0" y1="128" x2="128" y2="0">
-                        <stop stopColor="#9945FF"/>
-                        <stop offset="0.5" stopColor="#14F195"/>
-                        <stop offset="1" stopColor="#00D1FF"/>
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                  <span className="font-medium">Solana</span>
-                </button>
+          {!IS_SELF_HOSTED && (
+            <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Cost</span>
+                <span className="font-semibold">$5.00 USDC/month</span>
               </div>
-            </div>
 
-            <p className="text-xs text-muted-foreground">
-              Pay via x402 to activate your facilitator. Your facilitator will be created automatically after payment.
-            </p>
-          </div>
+              <div className="space-y-2">
+                <span className="text-sm">Pay with</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNetwork('base')}
+                    disabled={!isFormValid}
+                    className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors ${
+                      selectedNetwork === 'base'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/50'
+                    } ${!isFormValid ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 111 111" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="55.5" cy="55.5" r="55.5" fill="#0052FF"/>
+                      <path d="M55.5 96C77.8675 96 96 77.8675 96 55.5C96 33.1325 77.8675 15 55.5 15C33.1325 15 15 33.1325 15 55.5C15 77.8675 33.1325 96 55.5 96Z" fill="#0052FF"/>
+                      <path d="M55.5 85C71.793 85 85 71.793 85 55.5C85 39.207 71.793 26 55.5 26C39.207 26 26 39.207 26 55.5C26 71.793 39.207 85 55.5 85Z" fill="white"/>
+                    </svg>
+                    <span className="font-medium">Base</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNetwork('solana')}
+                    disabled={!isFormValid}
+                    className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors ${
+                      selectedNetwork === 'solana'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/50'
+                    } ${!isFormValid ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="64" cy="64" r="64" fill="url(#solana-gradient)"/>
+                      <path d="M36.5 79.3c.6-.6 1.4-1 2.3-1h53.3c1.5 0 2.2 1.8 1.1 2.8l-10.9 10.9c-.6.6-1.4 1-2.3 1H26.7c-1.5 0-2.2-1.8-1.1-2.8l10.9-10.9z" fill="white"/>
+                      <path d="M36.5 35c.6-.6 1.4-1 2.3-1h53.3c1.5 0 2.2 1.8 1.1 2.8L82.3 47.7c-.6.6-1.4 1-2.3 1H26.7c-1.5 0-2.2-1.8-1.1-2.8L36.5 35z" fill="white"/>
+                      <path d="M82.3 57c-.6-.6-1.4-1-2.3-1H26.7c-1.5 0-2.2 1.8-1.1 2.8l10.9 10.9c.6.6 1.4 1 2.3 1h53.3c1.5 0 2.2-1.8 1.1-2.8L82.3 57z" fill="white"/>
+                      <defs>
+                        <linearGradient id="solana-gradient" x1="0" y1="128" x2="128" y2="0">
+                          <stop stopColor="#9945FF"/>
+                          <stop offset="0.5" stopColor="#14F195"/>
+                          <stop offset="1" stopColor="#00D1FF"/>
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    <span className="font-medium">Solana</span>
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Pay via x402 to activate your facilitator. Your facilitator will be created automatically after payment.
+              </p>
+            </div>
+          )}
+
+          {IS_SELF_HOSTED && (
+            <div className="bg-muted/50 rounded-lg p-4">
+              <p className="text-sm text-muted-foreground">
+                Self-hosted mode: No payment required. You can create unlimited facilitators.
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
@@ -186,14 +241,16 @@ export function CreateFacilitatorModal({
             Cancel
           </Button>
           <Button
-            onClick={handlePayAndCreate}
-            disabled={!isFormValid || !selectedNetwork || pendingMutation.isPending}
+            onClick={handleCreate}
+            disabled={!isFormValid || (!IS_SELF_HOSTED && !selectedNetwork) || isPending}
           >
-            {pendingMutation.isPending ? (
+            {isPending ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Preparing...
+                {IS_SELF_HOSTED ? 'Creating...' : 'Preparing...'}
               </>
+            ) : IS_SELF_HOSTED ? (
+              'Create Facilitator'
             ) : (
               <>
                 <ExternalLink className="w-4 h-4 mr-2" />

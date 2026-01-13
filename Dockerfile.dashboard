@@ -21,9 +21,11 @@ COPY apps/dashboard ./apps/dashboard
 # Build
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Accept API URL as build arg (required for NEXT_PUBLIC_* vars to work)
+# Accept build args (required for NEXT_PUBLIC_* vars to work)
 ARG NEXT_PUBLIC_API_URL=http://localhost:5002
+ARG NEXT_PUBLIC_SELF_HOSTED=false
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_SELF_HOSTED=$NEXT_PUBLIC_SELF_HOSTED
 
 RUN pnpm turbo build --filter=@openfacilitator/dashboard
 

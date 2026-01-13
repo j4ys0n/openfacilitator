@@ -39,6 +39,7 @@ import { formatDate, formatAddress, cn } from '@/lib/utils';
 import { Navbar } from '@/components/navbar';
 import { NetworksSection, useNetworkStats } from '@/components/networks-section';
 import { TransactionsTable } from '@/components/transactions-table';
+import { SenderLeaderboard } from '@/components/sender-leaderboard';
 import { SettlementActivityChart } from '@/components/settlement-activity-chart';
 import { WebhooksSection } from '@/components/webhooks-section';
 import { PaymentLinksSection } from '@/components/payment-links-section';
@@ -522,6 +523,9 @@ export default function FacilitatorDetailPage() {
 
             {/* Chart */}
             <SettlementActivityChart facilitatorId={id} />
+
+            {/* Sender Leaderboard */}
+            <SenderLeaderboard transactions={transactionsData?.transactions || []} />
 
             {/* Transactions Table */}
             <Card>

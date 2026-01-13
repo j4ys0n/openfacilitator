@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type IRouter } from 'express';
-import { createFacilitator, type FacilitatorConfig, type TokenConfig, getSolanaPublicKey, networkToCaip2, getWalletAddress, getSolanaBalance } from '@openfacilitator/core';
+import { createFacilitator, type FacilitatorConfig, type TokenConfig, getSolanaPublicKey, networkToCaip2, getWalletAddress, getSolanaBalance, extractSolanaSender } from '@openfacilitator/core';
 import { z } from 'zod';
 import { requireFacilitator } from '../middleware/tenant.js';
 import { createTransaction, updateTransactionStatus } from '../db/transactions.js';
@@ -511,13 +511,26 @@ router.post('/settle', requireFacilitator, async (req: Request, res: Response) =
     const parsedPayload = JSON.parse(decoded);
 
     // Extract from_address based on network type
-    // Handle both flat and nested payload structures
     let fromAddress = 'unknown';
     if (isSolana) {
-      // For Solana, the payer is the fee payer - use payTo from requirements as fallback
-      // In x402, the payer signs the transaction, we don't have direct access to their address
-      // Use the configured feePayer or payTo as identifier
-      fromAddress = paymentRequirements.payTo || 'solana-payer';
+      // For Solana, parse the transaction to get the actual sender
+      // The sender is the signer that is NOT the fee payer (facilitator)
+      const transactionBase64 = parsedPayload.payload?.transaction;
+      if (transactionBase64) {
+        // Get our fee payer address (privateKey already decrypted above)
+        const ourFeePayer = getSolanaPublicKey(privateKey);
+
+        // Extract the actual sender from the transaction
+        const sender = extractSolanaSender(transactionBase64, ourFeePayer);
+        if (sender) {
+          fromAddress = sender;
+        } else {
+          logger.settle.warn('Could not identify distinct sender in Solana transaction', {
+            ...logCtx,
+            ourFeePayer,
+          });
+        }
+      }
     } else {
       // For EVM, use authorization.from - handle both nested and flat formats
       // Format 1: { authorization: { from: ... } }

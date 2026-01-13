@@ -430,3 +430,64 @@ export function isValidSolanaPrivateKey(privateKey: string): boolean {
   }
 }
 
+/**
+ * Extract the actual sender from a Solana transaction
+ *
+ * In x402 Solana transactions, there are typically two signers:
+ * 1. Fee payer (facilitator) - pays transaction fees
+ * 2. Actual sender - authorizes the token transfer
+ *
+ * This function finds the signer that is NOT the fee payer.
+ *
+ * @param transactionBase64 - Base64 encoded signed transaction
+ * @param feePayerAddress - The fee payer's public key (to exclude)
+ * @returns The sender's public key, or null if not found
+ */
+export function extractSolanaSender(
+  transactionBase64: string,
+  feePayerAddress: string
+): string | null {
+  try {
+    // Decode the transaction (try base64 first, then base58)
+    let txBytes: Uint8Array;
+    try {
+      // Try base64 first (most common for x402)
+      txBytes = Buffer.from(transactionBase64, 'base64');
+    } catch {
+      // Fall back to base58
+      txBytes = bs58.decode(transactionBase64);
+    }
+
+    // Try to deserialize - VersionedTransaction first, then legacy
+    let staticKeys: PublicKey[] = [];
+    let signatures: (Uint8Array | Buffer | null)[] = [];
+
+    try {
+      const vtx = VersionedTransaction.deserialize(txBytes);
+      staticKeys = vtx.message.staticAccountKeys;
+      signatures = vtx.signatures;
+    } catch {
+      const tx = Transaction.from(txBytes);
+      staticKeys = tx.signatures.map((s: { publicKey: PublicKey }) => s.publicKey);
+      signatures = tx.signatures.map((s: { signature: Buffer | null }) => s.signature);
+    }
+
+    // Find the actual sender (signer that is NOT the fee payer)
+    // Signers have non-zero signatures
+    for (let i = 0; i < signatures.length; i++) {
+      const sig = signatures[i];
+      // Check if this signature is valid (not null and not all zeros)
+      if (sig && sig.length > 0 && Array.from(sig).some(b => b !== 0)) {
+        const signerPubkey = staticKeys[i]?.toBase58();
+        if (signerPubkey && signerPubkey !== feePayerAddress) {
+          return signerPubkey;
+        }
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+

@@ -23,12 +23,15 @@ export function createFacilitator(data: {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
+    // Only lowercase EVM addresses (start with 0x), preserve case for Solana (Base58)
+    const normalizeAddress = (addr: string) => addr.startsWith('0x') ? addr.toLowerCase() : addr;
+
     stmt.run(
       id,
       data.name,
       data.subdomain.toLowerCase(),
       data.custom_domain?.toLowerCase() || null,
-      data.owner_address.toLowerCase(),
+      normalizeAddress(data.owner_address),
       data.supported_chains,
       data.supported_tokens,
       data.encrypted_private_key || null
@@ -98,7 +101,9 @@ export function getFacilitatorByCustomDomain(domain: string): FacilitatorRecord 
 export function getFacilitatorsByOwner(ownerAddress: string): FacilitatorRecord[] {
   const db = getDatabase();
   const stmt = db.prepare('SELECT * FROM facilitators WHERE owner_address = ? ORDER BY created_at DESC');
-  return stmt.all(ownerAddress.toLowerCase()) as FacilitatorRecord[];
+  // Only lowercase EVM addresses (start with 0x), preserve case for Solana (Base58)
+  const normalizedAddress = ownerAddress.startsWith('0x') ? ownerAddress.toLowerCase() : ownerAddress;
+  return stmt.all(normalizedAddress) as FacilitatorRecord[];
 }
 
 /**
@@ -110,6 +115,7 @@ export function updateFacilitator(
     name: string;
     custom_domain: string;
     additional_domains: string;
+    owner_address: string;
     supported_chains: string;
     supported_tokens: string;
     encrypted_private_key: string;
@@ -120,6 +126,9 @@ export function updateFacilitator(
   }>
 ): FacilitatorRecord | null {
   const db = getDatabase();
+
+  // Only lowercase EVM addresses (start with 0x), preserve case for Solana (Base58)
+  const normalizeAddress = (addr: string) => addr.startsWith('0x') ? addr.toLowerCase() : addr;
 
   // Build dynamic update query
   const fields: string[] = [];
@@ -136,6 +145,10 @@ export function updateFacilitator(
   if (updates.additional_domains !== undefined) {
     fields.push('additional_domains = ?');
     values.push(updates.additional_domains);
+  }
+  if (updates.owner_address !== undefined) {
+    fields.push('owner_address = ?');
+    values.push(normalizeAddress(updates.owner_address));
   }
   if (updates.supported_chains !== undefined) {
     fields.push('supported_chains = ?');

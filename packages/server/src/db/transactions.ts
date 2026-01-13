@@ -26,15 +26,20 @@ export function createTransaction(data: {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
+    // Only lowercase EVM addresses (start with 0x), preserve case for Solana (Base58)
+    const normalizeAddress = (addr: string) => addr.startsWith('0x') ? addr.toLowerCase() : addr;
+    // Only lowercase EVM token addresses, preserve case for Solana mint addresses
+    const normalizeAsset = (asset: string) => asset.startsWith('0x') ? asset.toLowerCase() : asset;
+
     stmt.run(
       id,
       data.facilitator_id,
       data.type,
       data.network,
-      data.from_address.toLowerCase(),
-      data.to_address.toLowerCase(),
+      normalizeAddress(data.from_address),
+      normalizeAddress(data.to_address),
       data.amount,
-      data.asset.toLowerCase(),
+      normalizeAsset(data.asset),
       data.transaction_hash || null,
       data.status,
       data.error_message || null

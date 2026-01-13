@@ -7,16 +7,44 @@ import { formatAddress, formatDate, isValidAddressFormat } from '@/lib/utils';
 import type { Transaction } from '@/lib/api';
 
 /**
+ * Check if network is Solana mainnet (handles multiple formats)
+ */
+function isSolanaMainnet(network: string): boolean {
+  return network === 'solana' ||
+         network === 'solana-mainnet' ||
+         network.startsWith('solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'); // CAIP-2 mainnet
+}
+
+/**
+ * Check if network is Solana devnet
+ */
+function isSolanaDevnet(network: string): boolean {
+  return network === 'solana-devnet' ||
+         network.startsWith('solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1');
+}
+
+/**
+ * Check if network is any Solana network
+ */
+function isSolanaNetwork(network: string): boolean {
+  return isSolanaMainnet(network) || isSolanaDevnet(network) || network.startsWith('solana:');
+}
+
+/**
  * Get explorer URL for an address based on network
  */
 function getAddressExplorerUrl(address: string, network: string): string | null {
   if (!isValidAddressFormat(address)) return null;
 
-  if (network === 'solana' || network === 'solana-mainnet') {
+  if (isSolanaMainnet(network)) {
     return `https://solscan.io/account/${address}`;
   }
-  if (network === 'solana-devnet') {
+  if (isSolanaDevnet(network)) {
     return `https://solscan.io/account/${address}?cluster=devnet`;
+  }
+  // Fallback for unknown Solana networks - use mainnet
+  if (isSolanaNetwork(network)) {
+    return `https://solscan.io/account/${address}`;
   }
   if (network === '8453' || network === 'base') {
     return `https://basescan.org/address/${address}`;
@@ -43,7 +71,7 @@ function AddressLink({ address, network }: { address: string; network: string })
         href={explorerUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="hover:text-foreground hover:underline"
+        className="text-blue-400 hover:text-blue-300 hover:underline"
         onClick={(e) => e.stopPropagation()}
       >
         {displayAddress}
@@ -75,11 +103,16 @@ function StatusBadge({ status }: { status: 'success' | 'failed' | 'pending' }) {
 
 function getExplorerUrl(tx: Transaction): string | null {
   if (!tx.transactionHash) return null;
-  if (tx.network === 'solana' || tx.network === 'solana-mainnet') {
+
+  if (isSolanaMainnet(tx.network)) {
     return `https://solscan.io/tx/${tx.transactionHash}`;
   }
-  if (tx.network === 'solana-devnet') {
+  if (isSolanaDevnet(tx.network)) {
     return `https://solscan.io/tx/${tx.transactionHash}?cluster=devnet`;
+  }
+  // Fallback for unknown Solana networks - use mainnet
+  if (isSolanaNetwork(tx.network)) {
+    return `https://solscan.io/tx/${tx.transactionHash}`;
   }
   if (tx.network === '8453' || tx.network === 'base') {
     return `https://basescan.org/tx/${tx.transactionHash}`;

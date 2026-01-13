@@ -227,7 +227,7 @@ router.get('/supported', requireFacilitator, (req: Request, res: Response) => {
   const hasSolanaWallet = !!record.encrypted_solana_private_key;
 
   // Add EVM signer only if EVM wallet is configured
-  if (hasEvmWallet) {
+  if (hasEvmWallet && record.encrypted_private_key) {
     try {
       const evmPrivateKey = decryptPrivateKey(record.encrypted_private_key) as Hex;
       const evmAddress = getWalletAddress(evmPrivateKey);
@@ -238,7 +238,7 @@ router.get('/supported', requireFacilitator, (req: Request, res: Response) => {
   }
 
   // Add feePayer for Solana networks and build signers
-  if (hasSolanaWallet) {
+  if (hasSolanaWallet && record.encrypted_solana_private_key) {
     try {
       const solanaPrivateKey = decryptPrivateKey(record.encrypted_solana_private_key);
       const solanaFeePayer = getSolanaPublicKey(solanaPrivateKey);

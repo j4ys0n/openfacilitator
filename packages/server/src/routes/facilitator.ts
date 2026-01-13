@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type IRouter } from 'express';
-import { createFacilitator, type FacilitatorConfig, type TokenConfig, getSolanaPublicKey, networkToCaip2 } from '@openfacilitator/core';
+import { createFacilitator, type FacilitatorConfig, type TokenConfig, getSolanaPublicKey, networkToCaip2, getWalletAddress } from '@openfacilitator/core';
 import { z } from 'zod';
 import { requireFacilitator } from '../middleware/tenant.js';
 import { createTransaction, updateTransactionStatus } from '../db/transactions.js';
@@ -222,13 +222,23 @@ router.get('/supported', requireFacilitator, (req: Request, res: Response) => {
   // Build signers object with namespace prefixes
   const signers: Record<string, string[]> = {};
 
-  // Add EVM signer address if available
-  if (record.owner_address) {
-    signers['eip155:*'] = [record.owner_address];
+  // Check which wallets are actually configured
+  const hasEvmWallet = !!record.encrypted_private_key;
+  const hasSolanaWallet = !!record.encrypted_solana_private_key;
+
+  // Add EVM signer only if EVM wallet is configured
+  if (hasEvmWallet) {
+    try {
+      const evmPrivateKey = decryptPrivateKey(record.encrypted_private_key) as Hex;
+      const evmAddress = getWalletAddress(evmPrivateKey);
+      signers['eip155:*'] = [evmAddress];
+    } catch (e) {
+      console.error('Failed to get EVM wallet address:', e);
+    }
   }
 
   // Add feePayer for Solana networks and build signers
-  if (record.encrypted_solana_private_key) {
+  if (hasSolanaWallet) {
     try {
       const solanaPrivateKey = decryptPrivateKey(record.encrypted_solana_private_key);
       const solanaFeePayer = getSolanaPublicKey(solanaPrivateKey);
@@ -253,6 +263,15 @@ router.get('/supported', requireFacilitator, (req: Request, res: Response) => {
       console.error('Failed to get Solana fee payer address:', e);
     }
   }
+
+  // Filter kinds to only include networks with configured wallets
+  supported.kinds = supported.kinds.filter(kind => {
+    if (isSolanaNetwork(kind.network)) {
+      return hasSolanaWallet;
+    }
+    // EVM networks (eip155:* or human-readable like 'base', 'polygon')
+    return hasEvmWallet;
+  });
 
   // Add signers and extensions to response
   supported.signers = signers;

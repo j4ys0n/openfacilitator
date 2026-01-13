@@ -7,6 +7,11 @@ on:
       - 'examples/**'
       - '**/*.md'
   workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'API URL for dashboard (NEXT_PUBLIC_API_URL)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -50,6 +55,8 @@ jobs:
           push: true
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ inputs.api_url || vars.NEXT_PUBLIC_API_URL || 'http://localhost:5002' }}
           tags: |
             ghcr.io/${{ github.repository }}-${{ matrix.image }}:latest
             ghcr.io/${{ github.repository }}-${{ matrix.image }}:${{ github.sha }}

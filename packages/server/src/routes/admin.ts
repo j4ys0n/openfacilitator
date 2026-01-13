@@ -88,7 +88,7 @@ const createFacilitatorSchema = z.object({
     .max(63)
     .regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/, 'Invalid subdomain format'),
   customDomain: z.string().max(255).optional(),
-  ownerAddress: z.string().optional(),
+  ownerAddress: z.string().min(1, 'Owner address is required'),
   supportedChains: z.array(chainIdSchema).optional(),
   supportedTokens: z
     .array(
@@ -231,9 +231,7 @@ router.post('/facilitators', requireAuth, async (req: Request, res: Response) =>
       return;
     }
 
-    const { name, subdomain, customDomain, supportedChains, supportedTokens } = parsed.data;
-    // Use the authenticated user's ID as owner, or wallet address if provided
-    const ownerAddress = parsed.data.ownerAddress || req.user!.id;
+    const { name, subdomain, customDomain, ownerAddress, supportedChains, supportedTokens } = parsed.data;
 
     // Default to production chains: Base Mainnet + Solana Mainnet
     const chains = supportedChains || [8453, 'solana'];

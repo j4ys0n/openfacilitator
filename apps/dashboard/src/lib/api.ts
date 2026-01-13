@@ -278,6 +278,7 @@ class ApiClient {
       name: string;
       customDomain: string | null;
       additionalDomains: string[];
+      ownerAddress: string;
       supportedChains: number[];
       supportedTokens: TokenConfig[];
     }>

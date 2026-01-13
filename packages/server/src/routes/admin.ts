@@ -63,7 +63,14 @@ import {
 import { encryptPrivateKey, decryptPrivateKey, generateWallet } from '../utils/crypto.js';
 import { generateWalletForUser, getWalletForUser, getUSDCBalance } from '../services/wallet.js';
 import { generateWebhookSecret, deliverWebhook } from '../services/webhook.js';
+import { logger } from '../utils/logger.js';
 import type { Hex } from 'viem';
+
+// Balance thresholds for warnings (in native units)
+const LOW_BALANCE_THRESHOLDS = {
+  sol: 0.01,    // SOL for Solana tx fees
+  eth: 0.001,   // ETH for EVM tx fees
+};
 
 const router: IRouter = Router();
 
@@ -838,23 +845,43 @@ router.get('/facilitators/:id/wallet/solana', requireAuth, async (req: Request, 
 
     // Get SOL balance
     let balance = null;
+    let lowBalance = false;
     try {
       const result = await getSolanaBalance('solana', address);
+      const solBalance = parseFloat(result.formatted);
       balance = {
         sol: result.formatted,
         lamports: result.balance.toString(),
       };
+
+      // Check for low balance and log warning
+      if (solBalance < LOW_BALANCE_THRESHOLDS.sol) {
+        lowBalance = true;
+        logger.balance.warn('LOW SOLANA BALANCE - Settlement transactions may fail', {
+          facilitatorId: facilitator.id,
+          facilitatorName: facilitator.name,
+          address,
+          balance: result.formatted,
+          threshold: LOW_BALANCE_THRESHOLDS.sol,
+          network: 'solana',
+        });
+      }
     } catch (e) {
-      console.error('Failed to get Solana balance:', e);
+      logger.balance.error('Failed to get Solana balance', {
+        facilitatorId: facilitator.id,
+        address,
+      }, e instanceof Error ? e : new Error(String(e)));
     }
 
     res.json({
       hasWallet: true,
       address,
       balance,
+      lowBalance,
+      lowBalanceThreshold: LOW_BALANCE_THRESHOLDS.sol,
     });
   } catch (error) {
-    console.error('Get Solana wallet error:', error);
+    logger.wallet.error('Get Solana wallet error', {}, error instanceof Error ? error : new Error(String(error)));
     res.status(500).json({ error: 'Internal server error' });
   }
 });

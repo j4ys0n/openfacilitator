@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type IRouter } from 'express';
-import { createFacilitator, type FacilitatorConfig, type TokenConfig, getSolanaPublicKey, networkToCaip2, getWalletAddress } from '@openfacilitator/core';
+import { createFacilitator, type FacilitatorConfig, type TokenConfig, getSolanaPublicKey, networkToCaip2, getWalletAddress, getSolanaBalance } from '@openfacilitator/core';
 import { z } from 'zod';
 import { requireFacilitator } from '../middleware/tenant.js';
 import { createTransaction, updateTransactionStatus } from '../db/transactions.js';
@@ -13,7 +13,14 @@ import { decryptPrivateKey } from '../utils/crypto.js';
 import { sendSettlementWebhook, deliverWebhook, generateWebhookSecret, type PaymentLinkWebhookPayload } from '../services/webhook.js';
 import { executeAction, type ActionResult } from '../services/actions.js';
 import { getWebhookById } from '../db/webhooks.js';
+import { logger } from '../utils/logger.js';
 import type { Hex } from 'viem';
+
+// Balance thresholds for warnings (in native units)
+const LOW_BALANCE_THRESHOLDS = {
+  sol: 0.01,    // SOL for Solana tx fees
+  eth: 0.001,   // ETH for EVM tx fees
+};
 
 const router: IRouter = Router();
 
@@ -284,9 +291,13 @@ router.get('/supported', requireFacilitator, (req: Request, res: Response) => {
  * POST /verify - Verify a payment payload
  */
 router.post('/verify', requireFacilitator, async (req: Request, res: Response) => {
+  const record = req.facilitator!;
+  const logCtx = { facilitatorId: record.id, facilitatorName: record.name };
+
   try {
     const parsed = verifyRequestSchema.safeParse(req.body);
     if (!parsed.success) {
+      logger.verify.warn('Invalid verify request', { ...logCtx, errors: parsed.error.issues });
       res.status(400).json({
         error: 'Invalid request',
         details: parsed.error.issues,
@@ -297,7 +308,13 @@ router.post('/verify', requireFacilitator, async (req: Request, res: Response) =
     // Normalize payload - accept both string and object format
     const paymentPayload = normalizePaymentPayload(parsed.data.paymentPayload);
     const { paymentRequirements } = parsed.data;
-    const record = req.facilitator!;
+
+    logger.verify.info('Verification request received', {
+      ...logCtx,
+      network: paymentRequirements.network,
+      amount: paymentRequirements.maxAmountRequired,
+      asset: paymentRequirements.asset,
+    });
 
     // Build facilitator config
     const config: FacilitatorConfig = {
@@ -315,7 +332,25 @@ router.post('/verify', requireFacilitator, async (req: Request, res: Response) =
     const facilitator = createFacilitator(config);
     const result = await facilitator.verify(paymentPayload, paymentRequirements);
 
-    // Log the verification attempt
+    // Log the verification result
+    if (result.valid) {
+      logger.verify.info('Payment verification SUCCESSFUL', {
+        ...logCtx,
+        network: paymentRequirements.network,
+        amount: paymentRequirements.maxAmountRequired,
+        payer: result.payer,
+      });
+    } else {
+      logger.verify.warn('Payment verification FAILED', {
+        ...logCtx,
+        network: paymentRequirements.network,
+        amount: paymentRequirements.maxAmountRequired,
+        payer: result.payer,
+        reason: result.invalidReason,
+      });
+    }
+
+    // Store the verification attempt in database
     if (result.payer) {
       createTransaction({
         facilitator_id: record.id,
@@ -332,7 +367,7 @@ router.post('/verify', requireFacilitator, async (req: Request, res: Response) =
 
     res.json(result);
   } catch (error) {
-    console.error('Verify error:', error);
+    logger.verify.error('Verification error', logCtx, error instanceof Error ? error : new Error(String(error)));
     res.status(500).json({
       valid: false,
       invalidReason: 'Internal server error',
@@ -344,9 +379,13 @@ router.post('/verify', requireFacilitator, async (req: Request, res: Response) =
  * POST /settle - Settle a payment
  */
 router.post('/settle', requireFacilitator, async (req: Request, res: Response) => {
+  const record = req.facilitator!;
+  const logCtx = { facilitatorId: record.id, facilitatorName: record.name };
+
   try {
     const parsed = settleRequestSchema.safeParse(req.body);
     if (!parsed.success) {
+      logger.settle.warn('Invalid settle request', { ...logCtx, errors: parsed.error.issues });
       res.status(400).json({
         error: 'Invalid request',
         details: parsed.error.issues,
@@ -357,7 +396,13 @@ router.post('/settle', requireFacilitator, async (req: Request, res: Response) =
     // Normalize payload - accept both string and object format
     const paymentPayload = normalizePaymentPayload(parsed.data.paymentPayload);
     const { paymentRequirements } = parsed.data;
-    const record = req.facilitator!;
+
+    logger.settle.info('Settlement request received', {
+      ...logCtx,
+      network: paymentRequirements.network,
+      amount: paymentRequirements.maxAmountRequired,
+      asset: paymentRequirements.asset,
+    });
 
     // Build facilitator config
     const config: FacilitatorConfig = {
@@ -376,16 +421,16 @@ router.post('/settle', requireFacilitator, async (req: Request, res: Response) =
 
     // Determine which private key to use based on network (supports both v1 and CAIP-2 formats)
     const isSolana = isSolanaNetwork(paymentRequirements.network);
-    
+
     let privateKey: string | undefined;
-    
+
     if (isSolana) {
       // Use Solana wallet for Solana networks
       if (record.encrypted_solana_private_key) {
         try {
           privateKey = decryptPrivateKey(record.encrypted_solana_private_key);
         } catch (e) {
-          console.error('Failed to decrypt Solana private key:', e);
+          logger.settle.error('Failed to decrypt Solana private key', logCtx, e instanceof Error ? e : new Error(String(e)));
           res.status(500).json({
             success: false,
             errorMessage: 'Failed to decrypt Solana wallet',
@@ -393,6 +438,7 @@ router.post('/settle', requireFacilitator, async (req: Request, res: Response) =
           return;
         }
       } else {
+        logger.settle.warn('Solana wallet not configured', logCtx);
         res.status(400).json({
           success: false,
           errorMessage: 'Solana wallet not configured. Please set up a Solana wallet in the dashboard.',
@@ -405,7 +451,7 @@ router.post('/settle', requireFacilitator, async (req: Request, res: Response) =
         try {
           privateKey = decryptPrivateKey(record.encrypted_private_key);
         } catch (e) {
-          console.error('Failed to decrypt EVM private key:', e);
+          logger.settle.error('Failed to decrypt EVM private key', logCtx, e instanceof Error ? e : new Error(String(e)));
           res.status(500).json({
             success: false,
             errorMessage: 'Failed to decrypt EVM wallet',
@@ -413,6 +459,7 @@ router.post('/settle', requireFacilitator, async (req: Request, res: Response) =
           return;
         }
       } else {
+        logger.settle.warn('EVM wallet not configured', logCtx);
         res.status(400).json({
           success: false,
           errorMessage: 'EVM wallet not configured. Please set up an EVM wallet in the dashboard.',
@@ -421,12 +468,48 @@ router.post('/settle', requireFacilitator, async (req: Request, res: Response) =
       }
     }
 
+    // Check balance before settlement (for Solana, warn if low)
+    if (isSolana) {
+      try {
+        const feePayerAddress = getSolanaPublicKey(privateKey);
+        const balanceResult = await getSolanaBalance('solana', feePayerAddress);
+        const solBalance = parseFloat(balanceResult.formatted);
+
+        if (solBalance < LOW_BALANCE_THRESHOLDS.sol) {
+          logger.balance.warn('LOW SOLANA BALANCE - Settlement may fail due to insufficient funds for fees', {
+            ...logCtx,
+            address: feePayerAddress,
+            balance: balanceResult.formatted,
+            threshold: LOW_BALANCE_THRESHOLDS.sol,
+            network: paymentRequirements.network,
+          });
+        } else {
+          logger.balance.debug('Solana balance check passed', {
+            ...logCtx,
+            address: feePayerAddress,
+            balance: balanceResult.formatted,
+          });
+        }
+      } catch (balanceError) {
+        logger.balance.warn('Could not check Solana balance before settlement', {
+          ...logCtx,
+          error: balanceError instanceof Error ? balanceError.message : String(balanceError),
+        });
+      }
+    }
+
+    logger.settle.info('Submitting settlement transaction', {
+      ...logCtx,
+      network: paymentRequirements.network,
+      walletType: isSolana ? 'solana' : 'evm',
+    });
+
     const result = await facilitator.settle(paymentPayload, paymentRequirements, privateKey);
 
     // Parse payload to get from address
     const decoded = Buffer.from(paymentPayload, 'base64').toString('utf-8');
     const parsedPayload = JSON.parse(decoded);
-    
+
     // Extract from_address based on network type
     // Handle both flat and nested payload structures
     let fromAddress = 'unknown';
@@ -442,8 +525,27 @@ router.post('/settle', requireFacilitator, async (req: Request, res: Response) =
       const authorization = parsedPayload.authorization || parsedPayload.payload?.authorization;
       fromAddress = authorization?.from || 'unknown';
     }
-    
-    // Log the settlement attempt
+
+    // Log the settlement result
+    if (result.success) {
+      logger.settle.info('Settlement transaction SUCCESSFUL', {
+        ...logCtx,
+        network: paymentRequirements.network,
+        amount: paymentRequirements.maxAmountRequired,
+        payer: fromAddress,
+        txHash: result.transactionHash,
+      });
+    } else {
+      logger.settle.error('Settlement transaction FAILED', {
+        ...logCtx,
+        network: paymentRequirements.network,
+        amount: paymentRequirements.maxAmountRequired,
+        payer: fromAddress,
+        error: result.errorMessage,
+      });
+    }
+
+    // Store the settlement attempt in database
     const transaction = createTransaction({
       facilitator_id: record.id,
       type: 'settle',
@@ -464,6 +566,11 @@ router.post('/settle', requireFacilitator, async (req: Request, res: Response) =
 
       // Send webhook notification (fire and forget)
       if (record.webhook_url && record.webhook_secret) {
+        logger.webhook.info('Sending settlement webhook', {
+          ...logCtx,
+          webhookUrl: record.webhook_url,
+          txHash: result.transactionHash,
+        });
         sendSettlementWebhook(
           record.webhook_url,
           record.webhook_secret,
@@ -483,7 +590,7 @@ router.post('/settle', requireFacilitator, async (req: Request, res: Response) =
 
     res.json(result);
   } catch (error) {
-    console.error('Settle error:', error);
+    logger.settle.error('Settlement error', logCtx, error instanceof Error ? error : new Error(String(error)));
     res.status(500).json({
       success: false,
       errorMessage: 'Internal server error',

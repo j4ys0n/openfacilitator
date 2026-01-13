@@ -208,9 +208,33 @@ export async function executeSolanaSettlement(
       });
     }
 
-    // Wait for transaction confirmation before returning success
+    // Wait for transaction confirmation with exponential backoff retry
     // This ensures downstream consumers can verify the transaction on-chain
     console.log('[SolanaSettlement] Waiting for confirmation...');
+
+    // Confirmation retry settings
+    const MAX_RETRIES = 10;
+    const INITIAL_DELAY_MS = 2000; // Start at 2 seconds
+    const MAX_DELAY_MS = 10000;    // Cap at 10 seconds
+    const BACKOFF_MULTIPLIER = 1.5;
+
+    // Helper to check transaction status
+    const checkTransactionStatus = async (): Promise<{ confirmed: boolean; failed: boolean; error?: string }> => {
+      try {
+        const status = await connection.getSignatureStatus(signature, { searchTransactionHistory: true });
+        if (status.value?.err) {
+          return { confirmed: false, failed: true, error: JSON.stringify(status.value.err) };
+        }
+        if (status.value?.confirmationStatus === 'confirmed' || status.value?.confirmationStatus === 'finalized') {
+          return { confirmed: true, failed: false };
+        }
+        return { confirmed: false, failed: false };
+      } catch {
+        return { confirmed: false, failed: false };
+      }
+    };
+
+    // First, try the standard confirmation method
     try {
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       const confirmation = await connection.confirmTransaction(
@@ -237,30 +261,47 @@ export async function executeSolanaSettlement(
         transactionHash: signature,
       };
     } catch (confirmError) {
-      // If confirmation times out but tx was sent, still return success
-      // The transaction may still land, just confirmation timed out
-      console.warn('[SolanaSettlement] Confirmation timeout, but tx was sent:', signature);
-      console.warn('[SolanaSettlement] Error:', confirmError);
+      // Standard confirmation failed - use exponential backoff retry
+      console.warn('[SolanaSettlement] Standard confirmation failed, using exponential backoff retry...');
+      console.warn('[SolanaSettlement] Error:', confirmError instanceof Error ? confirmError.message : confirmError);
 
-      // Check if the transaction landed anyway
-      try {
-        const status = await connection.getSignatureStatus(signature);
-        if (status.value?.confirmationStatus === 'confirmed' || status.value?.confirmationStatus === 'finalized') {
-          console.log('[SolanaSettlement] Transaction confirmed on retry check:', signature);
+      let delay = INITIAL_DELAY_MS;
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        console.log(`[SolanaSettlement] Retry attempt ${attempt}/${MAX_RETRIES} (waiting ${delay}ms)...`);
+
+        // Wait before checking
+        await new Promise(resolve => setTimeout(resolve, delay));
+
+        const status = await checkTransactionStatus();
+
+        if (status.confirmed) {
+          console.log(`[SolanaSettlement] SUCCESS! Transaction confirmed on retry ${attempt}:`, signature);
           return {
             success: true,
             transactionHash: signature,
           };
         }
-      } catch {
-        // Ignore status check errors
+
+        if (status.failed) {
+          console.error(`[SolanaSettlement] Transaction failed on-chain:`, status.error);
+          return {
+            success: false,
+            transactionHash: signature,
+            errorMessage: `Transaction failed: ${status.error}`,
+          };
+        }
+
+        // Exponential backoff with cap
+        delay = Math.min(delay * BACKOFF_MULTIPLIER, MAX_DELAY_MS);
       }
 
-      // Return the error - transaction may or may not have landed
+      // All retries exhausted - transaction status unknown
+      console.error('[SolanaSettlement] All confirmation retries exhausted. Transaction status unknown.');
       return {
         success: false,
         transactionHash: signature,
-        errorMessage: `Transaction sent but confirmation failed: ${confirmError instanceof Error ? confirmError.message : 'Timeout'}`,
+        errorMessage: `Transaction sent but confirmation failed after ${MAX_RETRIES} retries. Signature: ${signature}`,
       };
     }
   } catch (error) {

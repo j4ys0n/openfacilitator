@@ -99,6 +99,7 @@ const updateFacilitatorSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   customDomain: z.string().max(255).optional().nullable(),
   additionalDomains: z.array(z.string().max(255)).optional(),
+  ownerAddress: z.string().max(255).optional(),
   supportedChains: z.array(chainIdSchema).optional(),
   supportedTokens: z
     .array(
@@ -384,6 +385,9 @@ router.patch('/facilitators/:id', requireAuth, async (req: Request, res: Respons
     }
     if (parsed.data.additionalDomains !== undefined) {
       updates.additional_domains = JSON.stringify(parsed.data.additionalDomains);
+    }
+    if (parsed.data.ownerAddress) {
+      updates.owner_address = parsed.data.ownerAddress;
     }
     if (parsed.data.supportedChains) {
       updates.supported_chains = JSON.stringify(parsed.data.supportedChains);
@@ -1123,19 +1127,53 @@ router.get('/facilitators/:id/domain/status', requireAuth, async (req: Request, 
       return;
     }
 
-    if (!isRailwayConfigured()) {
-      // Return basic status without Railway integration
-      res.json({
-        domain: facilitator.custom_domain,
-        status: 'unconfigured',
-        railwayConfigured: false,
-        message: 'Railway integration not configured. Please contact support.',
-      });
-      return;
+    // Self-hosted mode: verify domain by checking if /health endpoint is accessible
+    const isSelfHosted = process.env.SELF_HOSTED === 'true';
+
+    if (isSelfHosted || !isRailwayConfigured()) {
+      // Verify domain by making HTTP request to health endpoint
+      try {
+        const healthUrl = `https://${facilitator.custom_domain}/health`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        const response = await fetch(healthUrl, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          res.json({
+            domain: facilitator.custom_domain,
+            status: 'active',
+            selfHosted: true,
+            message: 'Domain is configured and accessible!',
+          });
+          return;
+        } else {
+          res.json({
+            domain: facilitator.custom_domain,
+            status: 'error',
+            selfHosted: true,
+            message: `Domain returned HTTP ${response.status}. Check your reverse proxy configuration.`,
+          });
+          return;
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.json({
+          domain: facilitator.custom_domain,
+          status: 'unreachable',
+          selfHosted: true,
+          message: `Cannot reach domain: ${errorMessage}. Ensure DNS points to your server and reverse proxy is configured correctly.`,
+        });
+        return;
+      }
     }
 
     const status = await getDomainStatus(facilitator.custom_domain);
-    
+
     if (!status) {
       res.json({
         domain: facilitator.custom_domain,

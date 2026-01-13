@@ -99,10 +99,12 @@ export default function FacilitatorDetailPage() {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedDns, setCopiedDns] = useState(false);
   const [isChangeDomainOpen, setIsChangeDomainOpen] = useState(false);
+  const [isChangeOwnerAddressOpen, setIsChangeOwnerAddressOpen] = useState(false);
   const [isEditInfoOpen, setIsEditInfoOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
   const [newDomain, setNewDomain] = useState('');
+  const [newOwnerAddress, setNewOwnerAddress] = useState('');
   const [editName, setEditName] = useState('');
   const [faviconPreview, setFaviconPreview] = useState<string | null>(null);
   const faviconInputRef = useRef<HTMLInputElement>(null);
@@ -144,6 +146,15 @@ export default function FacilitatorDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['facilitators'] });
       setIsEditInfoOpen(false);
       setEditName('');
+    },
+  });
+
+  const updateOwnerAddressMutation = useMutation({
+    mutationFn: (ownerAddress: string) => api.updateFacilitator(id, { ownerAddress }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['facilitator', id] });
+      setIsChangeOwnerAddressOpen(false);
+      setNewOwnerAddress('');
     },
   });
 
@@ -627,7 +638,63 @@ export default function FacilitatorDetailPage() {
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Owner Address</Label>
-                    <p className="font-mono text-sm">{formatAddress(facilitator.ownerAddress)}</p>
+                    <div className="flex items-center justify-between">
+                      <p className="font-mono text-sm">{formatAddress(facilitator.ownerAddress)}</p>
+                      <Dialog open={isChangeOwnerAddressOpen} onOpenChange={setIsChangeOwnerAddressOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            Change
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Change Owner Address</DialogTitle>
+                            <DialogDescription>
+                              Enter your blockchain wallet address. This is where settlement payments will be sent.
+                              Make sure to use the correct case for Solana addresses (they are case-sensitive).
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="newOwnerAddress">Wallet Address</Label>
+                              <Input
+                                id="newOwnerAddress"
+                                placeholder="Your Solana or EVM wallet address"
+                                value={newOwnerAddress}
+                                onChange={(e) => setNewOwnerAddress(e.target.value)}
+                                className="font-mono"
+                              />
+                            </div>
+                            <div className="rounded-lg bg-muted/50 p-4 text-sm">
+                              <div className="font-medium mb-2">Important</div>
+                              <div className="text-muted-foreground space-y-1">
+                                <p>• Solana addresses are case-sensitive (Base58 encoding)</p>
+                                <p>• EVM addresses start with 0x and are 42 characters</p>
+                                <p>• This address receives all settlement payments</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" onClick={() => setIsChangeOwnerAddressOpen(false)}>
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={() => updateOwnerAddressMutation.mutate(newOwnerAddress)}
+                              disabled={!newOwnerAddress || updateOwnerAddressMutation.isPending}
+                            >
+                              {updateOwnerAddressMutation.isPending ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Saving...
+                                </>
+                              ) : (
+                                'Save Address'
+                              )}
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Created</Label>
